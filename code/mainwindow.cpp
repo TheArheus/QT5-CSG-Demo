@@ -11,6 +11,8 @@ MainWindow::MainWindow(QWidget *parent)
     ui->ObjPosX->setPlainText(QString::number(ui->widget->Cylinder.Position.x));
     ui->ObjPosY->setPlainText(QString::number(ui->widget->Cylinder.Position.y));
     ui->ObjPosZ->setPlainText(QString::number(ui->widget->Cylinder.Position.z));
+
+    setMouseTracking(true);
 }
 
 MainWindow::~MainWindow()
@@ -26,5 +28,17 @@ void MainWindow::on_pushButton_clicked()
     ui->ObjPosX->setPlainText(QString::number(ui->widget->Cylinder.Position.x));
     ui->ObjPosY->setPlainText(QString::number(ui->widget->Cylinder.Position.y));
     ui->ObjPosZ->setPlainText(QString::number(ui->widget->Cylinder.Position.z));
+}
+
+void MainWindow::
+mouseMoveEvent(QMouseEvent *Event)
+{
+    ui->widget->SetNewCamera(vec3(((Event->localPos().x() / (ui->widget->width())) * 2 - 1) / 100, 0, 0));
+}
+
+void MainWindow::
+mouseWheel(QWheelEvent *event)
+{
+
 }
 

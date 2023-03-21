@@ -100,18 +100,6 @@ void APIENTRY OpenGLRenderWidget::GLDebugMessageCallback(GLenum source, GLenum t
            id, _type.c_str(), _severity.c_str(), _source.c_str(), msg);
 }
 
-enum bsp_position
-{
-    POLYGON_COPLANAR_WITH_PLANE,
-    POLYGON_IN_FRONT_OF_PLANE,
-    POLYGON_BEHIND_PLANE,
-    POLYGON_STRADDLING_PLANE,
-
-    POINT_ON_PLANE,
-    POINT_IN_FRONT_OF_PLANE,
-    POINT_BEHIND_PLANE,
-};
-
 vec4
 GetPlaneFromPolygon(const polygon &Polygon)
 {
@@ -182,18 +170,18 @@ PickSplitingPlane(const std::vector<polygon>& Polygons)
 {
     vec4 BestPlane = {};
     float BestScore = std::numeric_limits<float>::max();
-    const float BlendFactor = 0.8f;
+    const float BlendFactor = 0.5f;
 
     for(uint32_t i = 0;
         i < Polygons.size();
-        i+=3)
+        i++)
     {
-        uint32_t NumInFront = 0, NumBehind = 0, NumStraddling = 0;
+        int NumInFront = 0, NumBehind = 0, NumStraddling = 0;
         vec4 Plane = GetPlaneFromPolygon(Polygons[i]);
 
         for(uint32_t j = 0;
             j < Polygons.size();
-            j+=3)
+            j++)
         {
             if(i == j) continue;
 
@@ -217,7 +205,7 @@ PickSplitingPlane(const std::vector<polygon>& Polygons)
                 } break;
             }
 
-            float Score = BlendFactor * NumStraddling + (1.0 - BlendFactor) * fabs(NumInFront - NumBehind);
+            float Score = BlendFactor * NumStraddling + (1.0f - BlendFactor) * abs(NumInFront - NumBehind);
             if(Score < BestScore)
             {
                 BestScore = Score;
@@ -227,233 +215,6 @@ PickSplitingPlane(const std::vector<polygon>& Polygons)
     }
 
     return BestPlane;
-}
-
-vec3
-EdgePlaneIntersection(vec3 A, vec3 B, vec4 Plane)
-{
-    vec3 Result = {};
-    vec3 AB = B - A;
-    vec3 Normal = Plane.xyz;
-    float t = (Plane.w - Normal.Dot(A)) / Normal.Dot(AB);
-    if(t > 1.0) return {};
-    if(t < 0.0) return {};
-    Result = Lerp(A, t, AB);
-
-    return Result;
-}
-
-void
-SplitPolygon(const polygon& Poly, vec4 SplitPlane, polygon* FrontPolygon, polygon* BackPolygon)
-{
-    uint32_t NumFront = 0, NumBack = 0;
-    std::vector<vec3> FrontVerts;
-    std::vector<vec3> BackVerts;
-
-    vec4 TempA = Poly.V[0].Pos;
-    vec3 A = TempA.xyz;
-    uint32_t ASide = ClassifyPointToPlane(A, SplitPlane);
-    for(int VertIdx = 1;
-        VertIdx < 3;
-        ++VertIdx)
-    {
-        vec4 TempB = Poly.V[VertIdx].Pos;
-        vec3 B = TempB.xyz;
-        uint32_t BSide = ClassifyPointToPlane(B, SplitPlane);
-        if(BSide == POINT_IN_FRONT_OF_PLANE)
-        {
-            if(ASide == POINT_BEHIND_PLANE)
-            {
-                vec3 IntersectionP = EdgePlaneIntersection(B, A, SplitPlane);
-                //assert(ClassifyPointToPlane(IntersectionP, SplitPlane) == POINT_ON_PLANE);
-                FrontVerts.push_back(IntersectionP);
-                BackVerts.push_back(IntersectionP);
-            }
-            FrontVerts.push_back(B);
-        }
-        else if(BSide == POINT_BEHIND_PLANE)
-        {
-            if(ASide == POINT_IN_FRONT_OF_PLANE)
-            {
-                vec3 IntersectionP = EdgePlaneIntersection(A, B, SplitPlane);
-                //assert(ClassifyPointToPlane(IntersectionP, SplitPlane) == POINT_ON_PLANE);
-                FrontVerts.push_back(IntersectionP);
-                BackVerts.push_back(IntersectionP);
-            }
-            else if(ASide == POINT_ON_PLANE)
-            {
-                BackVerts.push_back(A);
-            }
-            BackVerts.push_back(B);
-        }
-        else
-        {
-            FrontVerts.push_back(B);
-            if(ASide == POINT_BEHIND_PLANE)
-            {
-                BackVerts.push_back(B);
-            }
-            A = B;
-            ASide = BSide;
-        }
-    }
-
-    for(uint32_t i = 0;
-        i < FrontVerts.size();
-        ++i)
-    {
-        FrontPolygon->V[i].Pos = vec4(FrontVerts[i], 1);
-    }
-
-    for(uint32_t i = 0;
-        i < BackVerts.size();
-        ++i)
-    {
-        BackPolygon->V[i].Pos = vec4(BackVerts[i], 1);
-    }
-}
-
-std::unique_ptr<bsp_node>
-BuildBSPTree(const std::vector<polygon>& Polygons, uint32_t Depth = 0)
-{
-    if(Polygons.size() == 0) return nullptr;
-
-    std::unique_ptr<bsp_node> NewNode(new bsp_node);
-
-    std::vector<polygon> Front, Back;
-
-    vec4 SplitPlane = {}; //PickSplitingPlane(Polygons);
-
-    for(uint32_t i = 0;
-        i < Polygons.size();
-        i++)
-    {
-        polygon FrontPart = {};
-        polygon BackPart  = {};
-        if(i == 0)
-        {
-            NewNode->Polygons.push_back(Polygons[i]);
-            SplitPlane = GetPlaneFromPolygon(Polygons[i]);
-            continue;
-        }
-
-        switch(ClassifyPolygonToPlane(Polygons[i], SplitPlane))
-        {
-            case POLYGON_COPLANAR_WITH_PLANE:
-            {
-                NewNode->Polygons.push_back(Polygons[i]);
-            } break;
-            case POLYGON_IN_FRONT_OF_PLANE:
-            {
-                Front.push_back(Polygons[i]);
-            } break;
-            case POLYGON_BEHIND_PLANE:
-            {
-                Back.push_back(Polygons[i]);
-            } break;
-            case POLYGON_STRADDLING_PLANE:
-            {
-                SplitPolygon(Polygons[i], SplitPlane, &FrontPart, &BackPart);
-                Front.push_back(FrontPart);
-                Back.push_back(BackPart);
-            } break;
-        }
-    }
-
-    NewNode->Plane = SplitPlane;
-    NewNode->Front = BuildBSPTree(Front, Depth + 1);
-    NewNode->Back  = BuildBSPTree(Back, Depth + 1);
-
-    return NewNode;
-}
-
-void BSPInsert(std::unique_ptr<bsp_node>& Tree, const polygon& Polygon, uint32_t Depth = 0)
-{
-    vec4 SplitPlane = {};
-    polygon FrontPart = {};
-    polygon BackPart  = {};
-
-    switch(ClassifyPolygonToPlane(Polygon, SplitPlane))
-    {
-        case POLYGON_COPLANAR_WITH_PLANE:
-#if 0
-        {
-            Tree->Polygons.push_back(Polygon);
-        }break;
-#endif
-        case POLYGON_IN_FRONT_OF_PLANE:
-        {
-            if(!Tree->Front)
-            {
-                Tree->Front = std::make_unique<bsp_node>();
-                Tree->Front->Polygons.push_back(Polygon);
-                Tree->Front->Plane = GetPlaneFromPolygon(Polygon);
-                return;
-            }
-            BSPInsert(Tree->Front, Polygon, Depth + 1);
-        } break;
-        case POLYGON_BEHIND_PLANE:
-        {
-            if(!Tree->Back)
-            {
-                Tree->Back = std::make_unique<bsp_node>();
-                Tree->Back->Polygons.push_back(Polygon);
-                Tree->Back->Plane = GetPlaneFromPolygon(Polygon);
-                return;
-            }
-            BSPInsert(Tree->Back, Polygon, Depth + 1);
-        } break;
-        case POLYGON_STRADDLING_PLANE:
-        {
-            SplitPolygon(Polygon, SplitPlane, &FrontPart, &BackPart);
-            if(!Tree->Front && !Tree->Back)
-            {
-                Tree->Front = std::make_unique<bsp_node>();
-                Tree->Front->Polygons.push_back(Polygon);
-                Tree->Front->Plane = GetPlaneFromPolygon(Polygon);
-
-                Tree->Back = std::make_unique<bsp_node>();
-                Tree->Back->Polygons.push_back(Polygon);
-                Tree->Back->Plane = GetPlaneFromPolygon(Polygon);
-
-                return;
-            }
-            else if(!Tree->Front)
-            {
-                Tree->Front = std::make_unique<bsp_node>();
-                Tree->Front->Polygons.push_back(Polygon);
-                Tree->Front->Plane = GetPlaneFromPolygon(Polygon);
-                BSPInsert(Tree->Back, BackPart, Depth + 1);
-
-                return;
-            }
-            else if(!Tree->Back)
-            {
-                Tree->Back = std::make_unique<bsp_node>();
-                Tree->Back->Polygons.push_back(Polygon);
-                Tree->Back->Plane = GetPlaneFromPolygon(Polygon);
-
-                BSPInsert(Tree->Front, FrontPart, Depth + 1);
-
-                return;
-            }
-            //BSPInsert(Tree->Back, BackPart, Depth + 1);
-            //BSPInsert(Tree->Front, FrontPart, Depth + 1);
-        } break;
-    }
-}
-
-void BSPInsert(std::unique_ptr<bsp_node>& Tree, const std::vector<polygon>& Polygons, uint32_t Depth = 0)
-{
-    if(Polygons.size() == 0) return;
-    std::vector<polygon> Front, Back;
-
-    for(uint32_t i = 0;
-        i < Polygons.size();
-        i++)
-    {
-        BSPInsert(Tree, Polygons[i], Depth + 1);
-    }
 }
 
 bool BSPCollision(const std::unique_ptr<bsp_node>& Tree, const mesh& Mesh)
@@ -476,9 +237,389 @@ bool BSPCollision(const std::unique_ptr<bsp_node>& Tree, const mesh& Mesh)
     return Col1 && Col2 && Res;
 }
 
-std::unique_ptr<bsp_node> BSPTreeBoolean(const std::unique_ptr<bsp_node>& A, const std::unique_ptr<bsp_node>& B)
+bool BSPPolygonInside(const std::unique_ptr<bsp_node>& Tree, const polygon& Polygon)
 {
-    return nullptr;
+    bool Res;
+    bool Col1 = true, Col2 = true;
+    if(Tree->Front)
+        Col1 = BSPPolygonInside(Tree->Front, Polygon);
+    if(Tree->Back)
+        Col2 = BSPPolygonInside(Tree->Back, Polygon);
+    for(uint32_t Idx = 0;
+        Idx < 3;
+        ++Idx)
+    {
+        vec3 Pos = Polygon[Idx].Pos.xyz;
+        uint32_t CollisionCls = ClassifyPointToPlane(Pos, Tree->Plane);
+        Res = CollisionCls == POINT_BEHIND_PLANE;
+        if(Res) break;
+    }
+    return Col1 && Col2 && Res;
+}
+
+bool BSPPolygonOnPlane(const std::unique_ptr<bsp_node>& Tree, const polygon& Polygon)
+{
+    bool Res;
+    bool Col1 = true, Col2 = true;
+    if(Tree->Front)
+        Col1 = BSPPolygonInside(Tree->Front, Polygon);
+    if(Tree->Back)
+        Col2 = BSPPolygonInside(Tree->Back, Polygon);
+    for(uint32_t Idx = 0;
+        Idx < 3;
+        ++Idx)
+    {
+        vec3 Pos = Polygon[Idx].Pos.xyz;
+        uint32_t CollisionCls = ClassifyPointToPlane(Pos, Tree->Plane);
+        Res = CollisionCls == POINT_ON_PLANE;
+        if(Res) break;
+    }
+    return Col1 && Col2 && Res;
+}
+
+bool BSPCollision(const std::unique_ptr<bsp_node>& Tree, const polygon& Polygon)
+{
+    bool Res;
+    bool Col1 = true, Col2 = true;
+    if(Tree->Front)
+        Col1 = BSPPolygonInside(Tree->Front, Polygon);
+    if(Tree->Back)
+        Col2 = BSPPolygonInside(Tree->Back, Polygon);
+    for(uint32_t Idx = 0;
+        Idx < 3;
+        ++Idx)
+    {
+        vec3 Pos = Polygon[Idx].Pos.xyz;
+        uint32_t CollisionCls = ClassifyPointToPlane(Pos, Tree->Plane);
+        Res = CollisionCls == POINT_BEHIND_PLANE || CollisionCls == POINT_ON_PLANE;
+        if(Res) break;
+    }
+    return Col1 && Col2 && Res;
+}
+
+vec3
+EdgePlaneIntersection(vec3 A, vec3 B, vec4 Plane)
+{
+    vec3 Result = {};
+    vec3 AB = B - A;
+    vec3 Normal = Plane.xyz;
+    float t = (Plane.w - Normal.Dot(A)) / Normal.Dot(AB);
+    Result = A + AB * t;
+
+    return Result;
+}
+
+void
+SplitPolygon(const polygon& Poly, vec4 SplitPlane, std::vector<polygon>& FrontPolygons, std::vector<polygon>& BackPolygons, bool InsertFront = true, bool InsertBack = true)
+{
+    // NOTE: move this to vertex struct so that
+    // I could propagate normals to correct place
+    std::unordered_set<vec3> FrontVerts;
+    std::unordered_set<vec3> BackVerts;
+
+    vec4 TempPrev = Poly.V[2].Pos;
+    vec3 Prev = TempPrev.xyz;
+    uint32_t PrevSide = ClassifyPointToPlane(Prev, SplitPlane);
+    for(int VertIdx = 0;
+        VertIdx < 3;
+        ++VertIdx)
+    {
+        vec4 TempCurr = Poly.V[VertIdx].Pos;
+        vec3 Curr = TempCurr.xyz;
+        uint32_t CurrSide = ClassifyPointToPlane(Curr, SplitPlane);
+        if(CurrSide == POINT_IN_FRONT_OF_PLANE)
+        {
+            if(PrevSide == POINT_IN_FRONT_OF_PLANE)
+            {
+                FrontVerts.insert(Prev);
+            }
+            else if(PrevSide == POINT_BEHIND_PLANE)
+            {
+                vec3 I = EdgePlaneIntersection(Curr, Prev, SplitPlane);
+                //assert(ClassifyPointToPlane(I, SplitPlane) == POINT_ON_PLANE);
+                BackVerts.insert(Prev);
+                BackVerts.insert(I);
+                FrontVerts.insert(I);
+            }
+            else if(PrevSide == POINT_ON_PLANE)
+            {
+                FrontVerts.insert(Prev);
+            }
+            FrontVerts.insert(Curr);
+        }
+        else if(CurrSide == POINT_BEHIND_PLANE)
+        {
+            if(PrevSide == POINT_BEHIND_PLANE)
+            {
+                BackVerts.insert(Prev);
+            }
+            else if(PrevSide == POINT_IN_FRONT_OF_PLANE)
+            {
+                vec3 I = EdgePlaneIntersection(Prev, Curr, SplitPlane);
+                //assert(ClassifyPointToPlane(I, SplitPlane) == POINT_ON_PLANE);
+                FrontVerts.insert(Prev);
+                FrontVerts.insert(I);
+                BackVerts.insert(I);
+            }
+            else if(PrevSide == POINT_ON_PLANE)
+            {
+                BackVerts.insert(Prev);
+            }
+            BackVerts.insert(Curr);
+        }
+        else  if(CurrSide == POINT_ON_PLANE)
+        {
+            if(PrevSide == POINT_IN_FRONT_OF_PLANE)
+            {
+                FrontVerts.insert(Prev);
+                FrontVerts.insert(Curr);
+            }
+            else if(PrevSide == POINT_BEHIND_PLANE)
+            {
+                BackVerts.insert(Prev);
+                BackVerts.insert(Curr);
+            }
+
+        }
+        Prev = Curr;
+        PrevSide = CurrSide;
+    }
+
+
+    if(InsertFront)
+    {
+        if(FrontVerts.size() == 3)
+        {
+            vec3 v0 = *std::next(FrontVerts.begin(), 0);
+            vec3 v1 = *std::next(FrontVerts.begin(), 1);
+            vec3 v2 = *std::next(FrontVerts.begin(), 2);
+            polygon NewPolygon(v0, v1, v2, Poly[0].Norm, Poly[0].Col);
+            FrontPolygons.push_back(NewPolygon);
+        }
+        else if(FrontVerts.size() == 4)
+        {
+            vec3 v0 = *std::next(FrontVerts.begin(), 0);
+            vec3 v1 = *std::next(FrontVerts.begin(), 1);
+            vec3 v2 = *std::next(FrontVerts.begin(), 2);
+            vec3 v3 = *std::next(FrontVerts.begin(), 3);
+
+            polygon NewPolygon1(v0, v1, v2, Poly[0].Norm, Poly[0].Col);
+            FrontPolygons.push_back(NewPolygon1);
+
+            polygon NewPolygon2(v0, v2, v3, Poly[0].Norm, Poly[0].Col);
+            FrontPolygons.push_back(NewPolygon2);
+        }
+    }
+
+    if(InsertBack)
+    {
+        if(BackVerts.size() == 3)
+        {
+            vec3 v0 = *std::next(BackVerts.begin(), 0);
+            vec3 v1 = *std::next(BackVerts.begin(), 1);
+            vec3 v2 = *std::next(BackVerts.begin(), 2);
+            polygon NewPolygon(v0, v1, v2, Poly[0].Norm, Poly[0].Col);
+            BackPolygons.push_back(NewPolygon);
+        }
+        else if(BackVerts.size() == 4)
+        {
+            vec3 v0 = *std::next(BackVerts.begin(), 0);
+            vec3 v1 = *std::next(BackVerts.begin(), 1);
+            vec3 v2 = *std::next(BackVerts.begin(), 2);
+            vec3 v3 = *std::next(BackVerts.begin(), 3);
+
+            polygon NewPolygon1(v0, v1, v2, Poly[0].Norm, Poly[0].Col);
+            BackPolygons.push_back(NewPolygon1);
+
+            polygon NewPolygon2(v0, v2, v3, Poly[0].Norm, Poly[0].Col);
+            BackPolygons.push_back(NewPolygon2);
+        }
+    }
+}
+
+std::unique_ptr<bsp_node>
+BuildBSPTree(const std::vector<polygon>& Polygons, uint32_t Depth = 0)
+{
+    if(Polygons.size() == 0) return nullptr;
+
+    std::unique_ptr<bsp_node> NewNode(new bsp_node);
+    if(Depth >= 25)
+    {
+        NewNode->Polygons = Polygons;
+        return NewNode;
+    }
+
+    std::vector<polygon> Front, Back;
+
+    vec4 SplitPlane = PickSplitingPlane(Polygons);
+
+    for(uint32_t i = 0;
+        i < Polygons.size();
+        i++)
+    {
+        switch(ClassifyPolygonToPlane(Polygons[i], SplitPlane))
+        {
+            case POLYGON_COPLANAR_WITH_PLANE:
+            {
+                NewNode->Polygons.push_back(Polygons[i]);
+            } break;
+            case POLYGON_IN_FRONT_OF_PLANE:
+            {
+                Front.push_back(Polygons[i]);
+            } break;
+            case POLYGON_BEHIND_PLANE:
+            {
+                Back.push_back(Polygons[i]);
+            } break;
+            case POLYGON_STRADDLING_PLANE:
+            {
+                SplitPolygon(Polygons[i], SplitPlane, Front, Back);
+            } break;
+        }
+    }
+
+    NewNode->Plane = SplitPlane;
+    NewNode->Front = BuildBSPTree(Front, Depth + 1);
+    NewNode->Back  = BuildBSPTree(Back, Depth + 1);
+
+    return NewNode;
+}
+
+void BSPInsert(std::unique_ptr<bsp_node>& Tree, const std::vector<polygon>& Polygons)
+{
+    if(Polygons.size() == 0) return;
+    if(!Tree) return;
+    std::vector<polygon> Front, Back;
+
+    for(uint32_t i = 0;
+        i < Polygons.size();
+        i++)
+    {
+        vec4 SplitPlane = Tree->Plane;
+        polygon Polygon = Polygons[i];
+
+        switch(ClassifyPolygonToPlane(Polygon, SplitPlane))
+        {
+            case POLYGON_COPLANAR_WITH_PLANE:
+            {
+                Tree->Polygons.push_back(Polygon);
+            }break;
+            case POLYGON_IN_FRONT_OF_PLANE:
+            {
+                Front.push_back(Polygon);
+            } break;
+            case POLYGON_BEHIND_PLANE:
+            {
+                Back.push_back(Polygon);
+            } break;
+            case POLYGON_STRADDLING_PLANE:
+            {
+                SplitPolygon(Polygon, SplitPlane, Front, Back);
+            } break;
+        }
+    }
+
+    if(!Tree->Front && (Front.size() != 0))
+        Tree->Front = std::make_unique<bsp_node>();
+    if(!Tree->Back  && (Back.size() != 0))
+        Tree->Back  = std::make_unique<bsp_node>();
+
+    if(Tree->Front)
+        BSPInsert(Tree->Front, Front);
+    if(Tree->Back)
+        BSPInsert(Tree->Back, Back);
+}
+
+void BSPInsertInner(std::unique_ptr<bsp_node>& Tree, const std::vector<polygon>& Polygons)
+{
+    if(Polygons.size() == 0) return;
+    if(!Tree) return;
+    std::vector<polygon> Front, Back;
+
+    for(uint32_t i = 0;
+        i < Polygons.size();
+        i++)
+    {
+        vec4 SplitPlane = Tree->Plane;
+        polygon Polygon = Polygons[i];
+
+        switch(ClassifyPolygonToPlane(Polygon, SplitPlane))
+        {
+            case POLYGON_COPLANAR_WITH_PLANE:
+            {
+                Tree->Polygons.push_back(Polygon);
+            }break;
+            case POLYGON_BEHIND_PLANE:
+            {
+                Back.push_back(Polygon);
+            } break;
+            case POLYGON_STRADDLING_PLANE:
+            {
+                SplitPolygon(Polygon, SplitPlane, Front, Back, false, true);
+            } break;
+        }
+    }
+
+    if(!Tree->Front && (Front.size() != 0))
+        Tree->Front = std::make_unique<bsp_node>();
+    if(!Tree->Back  && (Back.size() != 0))
+        Tree->Back  = std::make_unique<bsp_node>();
+
+    if(Tree->Front)
+        BSPInsertInner(Tree->Front, Front);
+    if(Tree->Back)
+        BSPInsertInner(Tree->Back, Back);
+}
+
+void BSPInsertOuter(std::unique_ptr<bsp_node>& Tree, const std::vector<polygon>& Polygons)
+{
+    if(Polygons.size() == 0) return;
+    if(!Tree) return;
+    std::vector<polygon> Front, Back;
+
+    for(uint32_t i = 0;
+        i < Polygons.size();
+        i++)
+    {
+        vec4 SplitPlane = Tree->Plane;
+        polygon Polygon = Polygons[i];
+
+        switch(ClassifyPolygonToPlane(Polygon, SplitPlane))
+        {
+            case POLYGON_COPLANAR_WITH_PLANE:
+            {
+                Tree->Polygons.push_back(Polygon);
+            }break;
+            case POLYGON_IN_FRONT_OF_PLANE:
+            {
+                Front.push_back(Polygon);
+            } break;
+            case POLYGON_STRADDLING_PLANE:
+            {
+                SplitPolygon(Polygon, SplitPlane, Front, Back, true, false);
+            } break;
+        }
+    }
+
+    if(!Tree->Front && (Front.size() != 0))
+        Tree->Front = std::make_unique<bsp_node>();
+    if(!Tree->Back  && (Back.size() != 0))
+        Tree->Back  = std::make_unique<bsp_node>();
+
+    if(Tree->Front)
+        BSPInsertOuter(Tree->Front, Front);
+    if(Tree->Back)
+        BSPInsertOuter(Tree->Back, Back);
+}
+
+void BSPMerge(std::unique_ptr<bsp_node>& A, std::unique_ptr<bsp_node>& B)
+{
+    BSPInsert(A, B->Polygons);
+
+    if(B->Front)
+        BSPMerge(A, B->Front);
+    if(B->Back)
+        BSPMerge(A, B->Back);
 }
 
 uint32_t BSPGetIndexCount(const std::unique_ptr<bsp_node>& Tree)
@@ -486,41 +627,12 @@ uint32_t BSPGetIndexCount(const std::unique_ptr<bsp_node>& Tree)
     uint32_t Result = Tree->Polygons.size() * 3;
 
     if(Tree->Front) Result += BSPGetIndexCount(Tree->Front);
-    if(Tree->Back) Result  += BSPGetIndexCount(Tree->Back);
+    if(Tree->Back)  Result += BSPGetIndexCount(Tree->Back);
 
     return Result;
 }
 
-void BSPGenerateVertices(const std::unique_ptr<bsp_node>& Tree, mesh& Mesh, vec3 Color,
-                         std::unordered_map<vertex, uint64_t>& UniqueVertices, std::vector<uint32_t>& Indices, uint32_t& VertexIndex)
-{
-    for(polygon Poly : Tree->Polygons)
-    {
-        for(vertex Vert : Poly.V)
-        {
-            vertex NewVert;
-            NewVert.Pos  = Vert.Pos;
-            NewVert.Norm = Tree->Plane.xyz;
-            NewVert.Col  = Color;
-
-            if(UniqueVertices.count(NewVert) == 0)
-            {
-                UniqueVertices[NewVert] = static_cast<uint32_t>(Mesh.Vertices.size());
-                Mesh.Vertices.push_back(NewVert);
-            }
-
-            Indices[VertexIndex++] = UniqueVertices[NewVert];
-        }
-    }
-
-    if(Tree->Front)
-        BSPGenerateVertices(Tree->Front, Mesh, Color, UniqueVertices, Indices, VertexIndex);
-
-    if(Tree->Back)
-        BSPGenerateVertices(Tree->Back, Mesh, Color, UniqueVertices, Indices, VertexIndex);
-}
-
-void BSPGenerateVertices(const std::unique_ptr<bsp_node>& Tree, mesh& Mesh, vec3 Color)
+void BSPGenerateVertices(const std::unique_ptr<bsp_node>& Tree, mesh& Mesh)
 {
     std::unordered_map<vertex, uint32_t> UniqueVertices;
     uint32_t IndexCount = BSPGetIndexCount(Tree);
@@ -536,14 +648,15 @@ void BSPGenerateVertices(const std::unique_ptr<bsp_node>& Tree, mesh& Mesh, vec3
         Queue.pop();
         for(polygon Poly : Node->Polygons)
         {
+            uint32_t PolyIdx = 0;
             vec4 PolyPlane = GetPlaneFromPolygon(Poly);
             vec3 Normal = Mesh.Model.GetMat3() * PolyPlane.xyz;
             for(vertex Vert : Poly.V)
             {
                 vertex NewVert;
                 NewVert.Pos  = Vert.Pos;
-                NewVert.Norm = vec3(-Normal.x, -Normal.y, -Normal.z);
-                NewVert.Col  = Color;
+                NewVert.Norm = Poly.V[PolyIdx].Norm;
+                NewVert.Col  = Poly.V[PolyIdx++].Col;
 
                 if(UniqueVertices.count(NewVert) == 0)
                 {
@@ -562,8 +675,23 @@ void BSPGenerateVertices(const std::unique_ptr<bsp_node>& Tree, mesh& Mesh, vec3
             Queue.push(Node->Back.get());
     }
 
-
     Mesh.VertexIndices = Indices;
+}
+
+mesh
+MeshSubtract(mesh& A, mesh& B)
+{
+    mesh Result;
+    Result.Model = A.Model;
+    std::vector<polygon> APolygons = A.GeneratePolygons(A.VertexIndices);
+    std::vector<polygon> BPolygons = B.GeneratePolygons(B.VertexIndices);
+
+    std::unique_ptr<bsp_node> ATree = BuildBSPTree(APolygons);
+    std::unique_ptr<bsp_node> BTree = BuildBSPTree(BPolygons);
+    BSPMerge(ATree, BTree);
+
+    BSPGenerateVertices(ATree, Result);
+    return Result;
 }
 
 std::string LoadShaderSource(std::string Path)
@@ -628,8 +756,6 @@ initializeGL()
 
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)offsetof(vertex, Col));
-
-    glBindVertexArray(0);
 
     // Cylinder
     glGenVertexArrays(1, &CylinderVertexObject);
@@ -704,13 +830,15 @@ initializeGL()
     connect(Timer, SIGNAL(timeout()), this, SLOT(update()));
     //Timer->start(DeltaTime*1000);
     Timer->start(1000/33);
+
+    ViewMat = LookAt(CameraPos, TargetPoint, vec3(0, 1, 0));
 }
 
 void OpenGLRenderWidget::
 paintGL()
 {
     mesh ModCube = {};
-    ModCube.Model = Cube.Model;
+    ModCube.Model = FirstStep ? Cube.Model : Identity();
     mesh ModCylinder = {};
     ModCylinder.Model = Cylinder.Model;
     std::unique_ptr<bsp_node> CubeTree = BuildBSPTree(Cube.GeneratePolygons(Cube.VertexIndices));
@@ -719,36 +847,37 @@ paintGL()
     // NOTE: Maybe some optimizations on this check
     if(BSPCollision(CubeTree, Cylinder))
     {
-        std::unique_ptr<bsp_node> ModCubeTree = BuildBSPTree(Cube.GeneratePolygons(Cube.VertexIndices));
-        //BSPInsert(ModCubeTree, Cylinder.GeneratePolygons(Cylinder.VertexIndices));
+        Cube.UpdateColor(vec3(0.25, 0.7, 0.35));
+        Cylinder.UpdateColor(vec3(0.8, 0.25, 0.35));
 
-        BSPGenerateVertices(CubeTree, ModCube, vec3(0.1, 0.3, 0.2));
-        BSPGenerateVertices(CylinderTree, ModCylinder, vec3(0.7, 0.25, 0.35));
+        ModCube = MeshSubtract(Cube, Cylinder);
 
-        glBindVertexArray(CubeVertexObject);
+        glBindBuffer(GL_ARRAY_BUFFER, CubeVertexBuffer);
         glBufferData(GL_ARRAY_BUFFER, (int32_t)ModCube.Vertices.size() * sizeof(vertex), ModCube.Vertices.data(), GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, CubeIndexBuffer);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, (int32_t)ModCube.VertexIndices.size() * sizeof(unsigned int), ModCube.VertexIndices.data(), GL_DYNAMIC_DRAW);
-        glBindVertexArray(0);
 
-        glBindVertexArray(CylinderVertexObject);
+        glBindBuffer(GL_ARRAY_BUFFER, CylinderVertexBuffer);
         glBufferData(GL_ARRAY_BUFFER, (int32_t)ModCylinder.Vertices.size() * sizeof(vertex), ModCylinder.Vertices.data(), GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, CylinderIndexBuffer);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, (int32_t)ModCylinder.VertexIndices.size() * sizeof(unsigned int), ModCylinder.VertexIndices.data(), GL_DYNAMIC_DRAW);
-        glBindVertexArray(0);
     }
     else
     {
-        BSPGenerateVertices(CubeTree, ModCube, vec3(0.7f));
-        BSPGenerateVertices(CylinderTree, ModCylinder, vec3(0.7f));
+        Cube.UpdateColor(vec3(0.25, 0.7, 0.35));
+        Cylinder.UpdateColor(vec3(0.25, 0.7, 0.35));
+        BSPGenerateVertices(CubeTree, ModCube);
+        BSPGenerateVertices(CylinderTree, ModCylinder);
 
-        glBindVertexArray(CubeVertexObject);
+        glBindBuffer(GL_ARRAY_BUFFER, CubeVertexBuffer);
         glBufferData(GL_ARRAY_BUFFER, (int32_t)ModCube.Vertices.size() * sizeof(vertex), ModCube.Vertices.data(), GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, CubeIndexBuffer);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, (int32_t)ModCube.VertexIndices.size() * sizeof(unsigned int), ModCube.VertexIndices.data(), GL_DYNAMIC_DRAW);
-        glBindVertexArray(0);
 
-        glBindVertexArray(CylinderVertexObject);
+        glBindBuffer(GL_ARRAY_BUFFER, CylinderVertexBuffer);
         glBufferData(GL_ARRAY_BUFFER, (int32_t)ModCylinder.Vertices.size() * sizeof(vertex), ModCylinder.Vertices.data(), GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, CylinderIndexBuffer);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, (int32_t)ModCylinder.VertexIndices.size() * sizeof(unsigned int), ModCylinder.VertexIndices.data(), GL_DYNAMIC_DRAW);
-        glBindVertexArray(0);
     }
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -758,19 +887,15 @@ paintGL()
     glUniformMatrix4fv(glGetUniformLocation(Program, "Proj"), 1, GL_TRUE, (float*)&ProjMat.E);
     glUniformMatrix4fv(glGetUniformLocation(Program, "View"), 1, GL_TRUE, (float*)&ViewMat.E);
 
-    mat4 Ident = Identity();
     glBindVertexArray(CubeVertexObject);
-    //glUniformMatrix4fv(glGetUniformLocation(Program, "Model"), 1, GL_TRUE, (float*)&Ident.E);
-    glUniformMatrix4fv(glGetUniformLocation(Program, "Model"), 1, GL_TRUE, (float*)&Cube.Model.E);
     glDrawElements(GL_TRIANGLES, (int32_t)ModCube.VertexIndices.size(), GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
 
     glBindVertexArray(CylinderVertexObject);
-    glUniformMatrix4fv(glGetUniformLocation(Program, "Model"), 1, GL_TRUE, (float*)&Ident.E);
-    glDrawElements(GL_TRIANGLES, (int32_t)Cylinder.VertexIndices.size(), GL_UNSIGNED_INT, 0);
+    glDrawElements(GL_TRIANGLES, (int32_t)ModCylinder.VertexIndices.size(), GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
 
     A += DeltaTime;
+    FirstStep = false;
 }
 
 void OpenGLRenderWidget::
@@ -785,9 +910,28 @@ MoveTo(vec3 NewPos, float V)
 {
     V = V / 1000.0f;
     vec3 Dir = NewPos - Cylinder.Position;
-    Dir /= Dir.Length();
+    Dir.Normalize();
     Dir *= V;
 
     vec3 PosToSet = Cylinder.Position + Dir * DeltaTime;
     Cylinder.SetNewTransform(vec3(1), PosToSet, vec3(0));
+
+    CubeWasModified = true;
+}
+
+void OpenGLRenderWidget::
+SetNewCamera(vec3 Transform)
+{
+    vec4 CameraPosTemp = vec4(CameraPos, 1);
+
+    mat4 T1 = Translate(vec3(0, 0, CameraPos.z + Transform.z));
+    mat4 T2 = Translate(TargetPoint);
+    mat4 T3 = Translate(vec3(-TargetPoint.x, -TargetPoint.y, -TargetPoint.z));
+    mat4 Ry = RotateY(Transform.x);
+    mat4 Rz = RotateZ(Transform.y);
+
+    CameraPosTemp = (T2*Rz*Ry*T3) * CameraPosTemp;
+    CameraPos = CameraPosTemp.xyz;
+
+    ViewMat = LookAt(CameraPos, TargetPoint, vec3(0, 1, 0));
 }

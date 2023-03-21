@@ -2,6 +2,9 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QMouseEvent>
+#include <QWheelEvent>
+
 #include "mat_h.hpp"
 
 QT_BEGIN_NAMESPACE
@@ -20,6 +23,8 @@ public:
 
 private slots:
     void on_pushButton_clicked();
+    void mouseMoveEvent(QMouseEvent *event);
+    void mouseWheel(QWheelEvent *event);
 
 private:
     Ui::MainWindow *ui;

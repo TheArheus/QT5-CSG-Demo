@@ -32,6 +32,32 @@ struct vertex
 struct polygon
 {
     vertex V[3];
+    polygon() = default;
+    polygon(vec3 A, vec3 B, vec3 C, vec3 Norm, vec3 Col)
+    {
+        V[0].Pos  = vec4(A, 1);
+        V[0].Norm = Norm;
+        V[0].Col  = Col;
+        V[1].Pos  = vec4(B, 1);
+        V[1].Norm = Norm;
+        V[1].Col  = Col;
+        V[2].Pos  = vec4(C, 1);
+        V[2].Norm = Norm;
+        V[2].Col  = Col;
+    }
+
+    polygon(vec3 A, vec3 B, vec3 C, vec3 Norm0, vec3 Norm1, vec3 Norm2, vec3 Col)
+    {
+        V[0].Pos  = vec4(A, 1);
+        V[0].Norm = Norm0;
+        V[0].Col  = Col;
+        V[1].Pos  = vec4(B, 1);
+        V[1].Norm = Norm1;
+        V[1].Col  = Col;
+        V[2].Pos  = vec4(C, 1);
+        V[2].Norm = Norm2;
+        V[2].Col  = Col;
+    }
 
     vertex& operator[](uint32_t Idx)
     {

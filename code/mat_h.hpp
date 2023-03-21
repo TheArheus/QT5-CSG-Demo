@@ -485,6 +485,16 @@ struct v3
         return (this->x == rhs.x) && (this->y == rhs.y) && (this->z == rhs.z);
     }
 
+    bool operator<(const v3& rhs) const
+    {
+        return (this->x < rhs.x) && (this->y < rhs.y) && (this->z < rhs.z);
+    }
+
+    bool operator>(const v3& rhs) const
+    {
+        return (this->x > rhs.x) && (this->y > rhs.y) && (this->z > rhs.z);
+    }
+
     float Dot(const v3& rhs)
     {
         return this->x * rhs.x + this->y * rhs.y + this->z * rhs.z;
@@ -1201,6 +1211,23 @@ GeneratePlanes(plane* Planes, mat4 Proj, float NearZ, float FarZ = 0)
     Planes[5].Pos = vec3(0, 0, FarZ);
     Planes[5].Norm = vec3(Proj.E41 - Proj.E31, Proj.E42 - Proj.E32, Proj.E43 - Proj.E33);
     Planes[5].Norm /= Planes[5].Norm.Length();
+}
+
+inline mat4
+LookAt(vec3 CamPos, vec3 Target, vec3 Up)
+{
+    vec3 z = (Target - CamPos).Normalize();
+    vec3 x = Cross(Up, z).Normalize();
+    vec3 y = Cross(z, x);
+
+    mat4 Result =
+    {
+        x.x, x.y, x.z, -CamPos.Dot(x),
+        y.x, y.y, y.z, -CamPos.Dot(y),
+        z.x, z.y, z.z, -CamPos.Dot(z),
+          0,   0,   0,             1,
+    };
+    return Result;
 }
 
 namespace std
