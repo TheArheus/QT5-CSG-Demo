@@ -26,7 +26,6 @@ struct vertex
 
         return Res1 && Res3;
     }
-
 };
 
 struct polygon
@@ -68,6 +67,15 @@ struct polygon
     {
         return V[Idx];
     }
+
+    bool operator==(const polygon& rhs) const
+    {
+        bool Res1 = (*this)[0] == rhs[0];
+        bool Res2 = (*this)[1] == rhs[1];
+        bool Res3 = (*this)[2] == rhs[2];
+
+        return Res1 && Res2 && Res3;
+    }
 };
 
 namespace std
@@ -80,6 +88,18 @@ struct hash<vertex>
         size_t res = 0;
         std::hash_combine(res, hash<decltype(VertData.Pos)>{}(VertData.Pos));
         std::hash_combine(res, hash<decltype(VertData.Norm)>{}(VertData.Norm));
+        return res;
+    }
+};
+template<>
+struct hash<polygon>
+{
+    size_t operator()(const polygon& Poly) const
+    {
+        size_t res = 0;
+        std::hash_combine(res, hash<decltype(Poly[0])>{}(Poly[0]));
+        std::hash_combine(res, hash<decltype(Poly[1])>{}(Poly[1]));
+        std::hash_combine(res, hash<decltype(Poly[2])>{}(Poly[2]));
         return res;
     }
 };
