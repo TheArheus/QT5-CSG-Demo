@@ -116,7 +116,7 @@ void mesh::GenerateCylinder(int SectorCount, float Height, float Radius)
 {
     std::vector<vec3> UnitPositions = GetUnitCirclePositions(SectorCount);
 
-    vertex Vertex = {0, 0, vec3(0.24f, 0.7f, 0.36f)};
+    vertex Vertex(vec3(0), vec3(0), vec3(0.24f, 0.7f, 0.36f));
 
     for (int i = 0; i < 2; ++i)
     {
@@ -294,7 +294,7 @@ LoadMesh(const std::string& Path)
         VertexIndex < IndexCount;
         ++VertexIndex)
     {
-        vertex Vert = {0, 0, vec3(0.24, 0.7, 0.36)};
+        vertex Vert(vec4(0), vec3(0), vec3(0.24, 0.7, 0.36));
 
         vec3 Pos = Coords[CoordIndices[VertexIndex]];
         Vert.Pos = vec4(Pos, 1.0);
@@ -347,5 +347,35 @@ GeneratePolygons(std::vector<uint32_t> Indices)
         Result[Idx].V[2] = NewVertC;
     }
 
+    return Result;
+}
+
+std::vector<vec3> mesh::
+GenerateShape(std::vector<uint32_t> Indices)
+{
+    std::unordered_set<vec3> Shape;
+    vertex NewVertA = {};
+    vertex NewVertB = {};
+    vertex NewVertC = {};
+    vec3 A, B, C;
+    for(uint32_t Idx = 0;
+        Idx < Indices.size() / 3;
+        Idx++)
+    {
+        uint32_t VertIdx0 = Indices[Idx * 3 + 0];
+        uint32_t VertIdx1 = Indices[Idx * 3 + 1];
+        uint32_t VertIdx2 = Indices[Idx * 3 + 2];
+        NewVertA = Vertices[VertIdx0];
+        NewVertB = Vertices[VertIdx1];
+        NewVertC = Vertices[VertIdx2];
+        A = (Model * NewVertA.Pos).xyz;
+        B = (Model * NewVertB.Pos).xyz;
+        C = (Model * NewVertC.Pos).xyz;
+        Shape.insert(A);
+        Shape.insert(B);
+        Shape.insert(C);
+    }
+
+    std::vector<vec3> Result(Shape.begin(), Shape.end());
     return Result;
 }

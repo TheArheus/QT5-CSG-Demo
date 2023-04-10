@@ -4,6 +4,7 @@
 #include "mat_h.hpp"
 
 #include <unordered_map>
+#include <unordered_set>
 #include <fstream>
 #include <string>
 
@@ -119,6 +120,7 @@ public:
     void LoadMesh(const std::string& Path);
     void GenerateCylinder(int SectorCount, float Height, float Radius);
     std::vector<polygon> GeneratePolygons(std::vector<uint32_t> Indices);
+    std::vector<vec3> GenerateShape(std::vector<uint32_t> Indices);
 
     void UpdateColor(const vec3 NewCol);
 

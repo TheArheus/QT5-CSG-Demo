@@ -14,6 +14,8 @@
 #include <unordered_set>
 #include <algorithm>
 
+#include <cmath>
+
 #include "mat_h.hpp"
 #include "mesh.h"
 
